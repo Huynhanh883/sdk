@@ -1069,6 +1069,7 @@ void MegaClient::init()
 
     jsonsc.pos = NULL;
     insca = false;
+    insca_count = 0;
     scnotifyurl.clear();
     *scsn = 0;
 
@@ -1903,7 +1904,7 @@ void MegaClient::exec()
                         && pendingsc->in.size()
                         && pendingsc->in[0] == '0')
                 {
-                    LOG_debug << "Waitd keep-alive received";
+                    LOG_debug << "SC keep-alive received";
                     delete pendingsc;
                     pendingsc = NULL;
                     btsc.reset();
@@ -1912,6 +1913,8 @@ void MegaClient::exec()
 
                 if (*pendingsc->in.c_str() == '{')
                 {
+                    insca = false;
+                    insca_count = 0;
                     jsonsc.begin(pendingsc->in.c_str());
                     jsonsc.enterobject();
                     break;
@@ -2087,7 +2090,6 @@ void MegaClient::exec()
             }
             pendingsc->posturl.append(auth);
             pendingsc->type = REQ_JSON;
-            LOG_debug << "Sending keep-alive to waitd";
             pendingsc->post(this);
             jsonsc.pos = NULL;
         }
@@ -4000,7 +4002,7 @@ bool MegaClient::procsc()
                     mergenewshares(1);
                     applykeys();
 
-                    if (!statecurrent)
+                    if (!statecurrent && insca_count == 0)   // with actionpacket spoonfeeding, just finishing a batch does not mean we are up to date yet - keep going until we get an empty response
                     {
                         if (fetchingnodes)
                         {
@@ -4072,7 +4074,7 @@ bool MegaClient::procsc()
                         string report;
                         fnstats.toJsonArray(&report);
 
-                        sendevent(99426, report.c_str(), 0);
+                        sendevent(99426, report.c_str(), 0);    // Treeproc performance log
 
                         // NULL vector: "notify all elements"
                         app->nodes_updated(NULL, int(nodes.size()));
@@ -4094,7 +4096,11 @@ bool MegaClient::procsc()
                             useralerts.begincatchup = true;
                         }
                     }
-                    app->catchup_result();
+
+                    if (statecurrent)
+                    {
+                        app->catchup_result();
+                    }
                     return true;
 
                 case 'a':
@@ -4102,6 +4108,7 @@ bool MegaClient::procsc()
                     {
                         LOG_debug << "Processing action packets";
                         insca = true;
+                        insca_count = 0;
                         break;
                     }
                     // fall through
@@ -4118,6 +4125,8 @@ bool MegaClient::procsc()
         {
             if (jsonsc.enterobject())
             {
+                ++insca_count;
+
                 // the "a" attribute is guaranteed to be the first in the object
                 if (jsonsc.getnameid() == 'a')
                 {
@@ -10839,6 +10848,7 @@ void MegaClient::fetchnodes(bool nocache)
         jsonsc.pos = NULL;
         scnotifyurl.clear();
         insca = false;
+        insca_count = 0;
         btsc.reset();
 
         // don't allow to start new sc requests yet

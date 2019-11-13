@@ -1007,6 +1007,7 @@ public:
     // Server-MegaClient request JSON and processing state flag ("processing a element")
     JSON jsonsc;
     bool insca;
+    unsigned insca_count;
 
     // no two interrelated client instances should ever have the same sessionid
     char sessionid[10];
